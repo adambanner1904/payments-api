@@ -6,3 +6,7 @@
 # An example controller showing a sample home page
 GET     /health                           controllers.HealthController.ok()
 
+POST    /payments                         controllers.PaymentsController.createPayment()
+
+GET     /payments/:id                     controllers.PaymentsController.getPayment(id: Integer)
+GET     /payments                         controllers.PaymentsController.getPayments()
