@@ -1,40 +1,56 @@
 package repositories
 
-import models.Payment
-import models.PaymentMethod.*
-import models.Timestamp
-import java.time.LocalDateTime
+import models.*
 import models.request.CreatePaymentRequest
+import java.time.LocalDateTime
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, ExecutionContext}
+import org.mongodb.scala.*
+
 import javax.inject.{Inject, Singleton}
-import org.mongodb.scala.{MongoCollection, MongoDatabase, Document, ObservableFuture}
+import org.mongodb.scala.model.Filters
+import org.bson.types.ObjectId
 
 @Singleton
-class PaymentRepository @Inject() (db: MongoDatabase):
-  private val collection: MongoCollection[Document] = 
+class PaymentRepository @Inject() (db: MongoDatabase)(using ExecutionContext):
+  private val collection: MongoCollection[Document] =
     db.getCollection("payments")
-    
-  var payments: List[Payment] = List(
-    Payment(1,  7500,  PayByBank, Timestamp(LocalDateTime.of(2024, 5, 20, 9,  45, 0))),
-    Payment(2,  4999,  Card,      Timestamp(LocalDateTime.of(2024, 1, 5,  9,  15, 0))),
-    Payment(3,  1500,  PayByBank, Timestamp(LocalDateTime.of(2024, 1, 12, 11, 42, 0))),
-    Payment(4,  8750,  Card,      Timestamp(LocalDateTime.of(2024, 2, 3,  14, 0,  0))),
-    Payment(5,  300,   PayByBank, Timestamp(LocalDateTime.of(2024, 2, 17, 8,  30, 0))),
-    Payment(6,  12000, Card,      Timestamp(LocalDateTime.of(2024, 3, 1,  16, 55, 0))),
-    Payment(7,  650,   PayByBank, Timestamp(LocalDateTime.of(2024, 3, 22, 10, 10, 0))),
-    Payment(8,  9999,  Card,      Timestamp(LocalDateTime.of(2024, 4, 8,  13, 25, 0))),
-    Payment(9,  450,   PayByBank, Timestamp(LocalDateTime.of(2024, 4, 19, 17, 5,  0))),
-    Payment(10, 3200,  Card,      Timestamp(LocalDateTime.of(2024, 5, 6,  12, 0,  0)))
-  )
-  
-  def allPayments: Future[Seq[Payment]] = 
+
+  def allPayments: Future[Seq[Payment]] =
     collection
       .find()
-      .map(Payment.fromDocument)
+      .map(fromDocument)
       .toFuture()
 
-  def save(payment: CreatePaymentRequest): Unit = 
-    payments = payments :+ Payment(lastId + 1, payment)
+  def findPayment(oid: ObjectId): Future[Option[Payment]] =
+        collection
+          .find(Filters.eq("_id", oid))
+          .headOption()
+          .map(_.map(fromDocument))
+
+  def save(cpr: CreatePaymentRequest): Future[Payment] =
+    val doc = toDocument(cpr)
+    collection
+      .insertOne(doc)
+      .toFuture()
+      .map: result =>
+        val id = result.getInsertedId().asObjectId().getValue().toString()
+        Payment(id, cpr.amountInPence, cpr.method, cpr.paymentTime)
+
+  private def fromDocument(doc: Document): Payment = 
+    Payment(
+      id = doc("_id").asObjectId().getValue.toString(),
+      amountInPence = AmountInPence(doc("amountInPence").asInt32.getValue),
+      method = PaymentMethod.valueOf(doc("method").asString.getValue),
+      paymentTime = Timestamp(LocalDateTime.parse(doc("paymentTime").asString.getValue))
+    )
     
-  def lastId: Int = payments.maxBy(_.paymentId).paymentId
+  def toDocument(p: CreatePaymentRequest): Document =
+    Document(
+      "createdAt" -> Timestamp.now().toString,
+      "auditSource" -> "payments-api",
+      "schemaVersion" -> 1,
+      "amountInPence" -> p.amountInPence.toLong,
+      "method" -> p.method.toString,
+      "paymentTime" -> p.paymentTime.toString
+    )

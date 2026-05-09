@@ -1,11 +1,24 @@
 package models
 
-import play.api.libs.json.{Format, JsNumber, JsValue}
+import play.api.libs.json.* 
 
-type AmountInPence = Int
+opaque type AmountInPence = Long
 
-// object AmountInPence:
-  // given Format[AmountInPence] = Format[AmountInPence](
-  //   json => json.validate[Int],
-  //   amount => JsNumber(amount)
-  // )
+object AmountInPence:
+  def apply(value: Long): AmountInPence = value
+  def unapply(value: AmountInPence): Option[Long] = Some(value)
+
+  given Format[AmountInPence] = Format(
+    _.validate[Long].map(AmountInPence.apply),
+    a => JsNumber(a)
+  )
+
+  given Ordering[AmountInPence] = Ordering[Long]
+  
+  extension (a: AmountInPence)
+    def >(other: Long): Boolean  = a > other
+    def <(other: Long): Boolean  = a < other
+    def >=(other: Long): Boolean = a >= other
+    def <=(other: Long): Boolean = a <= other
+
+    def toLong: Long = a.toLong

@@ -2,6 +2,7 @@ package models
 
 import java.time.LocalDateTime
 import play.api.libs.json.*
+import scala.util.Try
 
 opaque type Timestamp = LocalDateTime
 
@@ -10,7 +11,12 @@ object Timestamp:
   def now(): Timestamp = LocalDateTime.now()
   
   given Format[Timestamp] = Format[Timestamp](
-    _.validate[String].map(LocalDateTime.parse),
+    json => json.validate[String].flatMap(s => 
+      Try(LocalDateTime.parse(s)).fold(
+        _ => JsError(s"Invalid timestamp format: $s"),
+        t => JsSuccess(Timestamp(t))
+      )
+    ),
     ts => JsString(ts.toString)
   )
   

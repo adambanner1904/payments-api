@@ -7,16 +7,13 @@ enum PaymentMethod:
   case Card, PayByBank
   
 object PaymentMethod:
-  given Reads[PaymentMethod] = Reads[PaymentMethod](json => 
+  given Reads[PaymentMethod] = Reads[PaymentMethod]: json => 
     json.validate[String].flatMap: s => 
       Try(PaymentMethod.valueOf(s))
         .fold(
           _ => JsError(s"'$s' is not a valid PaymentMethod. Must be one of: ${PaymentMethod.values.mkString(", ")}"),
           m => JsSuccess(m)
         )
-    
-  )
-  given Format[PaymentMethod] = Format(
-    _.validate[String].map(PaymentMethod.valueOf),
-    pm => JsString(pm.toString)
-  )
+        
+  given Writes[PaymentMethod] = Writes[PaymentMethod]: pm => 
+    JsString(pm.toString)
